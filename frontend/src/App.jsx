@@ -1,5 +1,12 @@
 import React, { useState, useEffect, useRef } from "react";
-import { Button, Typography, Stack, List, ListItem } from "@mui/material";
+import {
+  Button,
+  Typography,
+  Stack,
+  List,
+  ListItem,
+  ListItemText,
+} from "@mui/material";
 
 const WORK_DURATION = 25 * 60;
 const SHORT_BREAK = 5 * 60;
@@ -12,17 +19,22 @@ const formatTime = (seconds) => {
   return `${m}:${s}`;
 };
 
+const getTimeString = () =>
+  new Date().toLocaleTimeString("ko-KR", { hour12: false });
+
 export default function App() {
   const [secondsLeft, setSecondsLeft] = useState(WORK_DURATION);
   const [isRunning, setIsRunning] = useState(false);
   const [cycle, setCycle] = useState(0);
   const [phase, setPhase] = useState("집중");
   const [history, setHistory] = useState([]);
+  const [phaseComplete, setPhaseComplete] = useState(false);
+  const [startTime, setStartTime] = useState(null);
 
   const canvasRef = useRef(null);
   const videoRef = useRef(null);
 
-  // 타이머 진행
+  // 타이머 로직
   useEffect(() => {
     if (!isRunning) return;
 
@@ -32,9 +44,17 @@ export default function App() {
           clearInterval(interval);
           setIsRunning(false);
 
-          const timestamp = new Date().toLocaleTimeString();
-          setHistory((h) => [...h, `${timestamp} - ${phase} 완료`]);
+          if (!phaseComplete && startTime) {
+            const endTime = getTimeString();
+            setHistory((h) => [
+              ...h,
+              `${startTime} ~ ${endTime} - ${phase} 완료`,
+            ]);
+            setPhaseComplete(true);
+            setStartTime(null);
+          }
 
+          // phase 전환
           if (phase === "집중") {
             if (cycle === CYCLE_COUNT - 1) {
               setPhase("긴 휴식");
@@ -59,6 +79,11 @@ export default function App() {
     return () => clearInterval(interval);
   }, [isRunning]);
 
+  // phase 변경 시 기록 플래그 초기화
+  useEffect(() => {
+    setPhaseComplete(false);
+  }, [phase]);
+
   // canvas에 상태 + 시간 그리기
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -76,7 +101,6 @@ export default function App() {
     ctx.fillText(formatTime(secondsLeft), canvas.width / 2, 100);
   }, [secondsLeft, phase]);
 
-  // PiP 실행
   const enterPiP = async () => {
     const stream = canvasRef.current.captureStream();
     videoRef.current.srcObject = stream;
@@ -84,13 +108,21 @@ export default function App() {
     await videoRef.current.requestPictureInPicture();
   };
 
-  // 초기화
+  const toggleTimer = () => {
+    if (!isRunning) {
+      setStartTime(getTimeString());
+    }
+    setIsRunning((prev) => !prev);
+  };
+
   const resetAll = () => {
     setIsRunning(false);
     setPhase("집중");
     setSecondsLeft(WORK_DURATION);
     setCycle(0);
     setHistory([]);
+    setPhaseComplete(false);
+    setStartTime(null);
   };
 
   return (
@@ -100,7 +132,7 @@ export default function App() {
       <Typography variant="h2">{formatTime(secondsLeft)}</Typography>
 
       <Stack spacing={2} direction="row">
-        <Button variant="contained" onClick={() => setIsRunning(!isRunning)}>
+        <Button variant="contained" onClick={toggleTimer}>
           {isRunning ? "일시정지" : "시작"}
         </Button>
         <Button variant="outlined" onClick={resetAll}>
@@ -111,17 +143,18 @@ export default function App() {
         </Button>
       </Stack>
 
-      {/* 완료 기록 표시 */}
       <Typography variant="h6" mt={4}>
         기록
       </Typography>
-      <List sx={{ maxHeight: 150, overflowY: "auto", width: "300px" }}>
+      <List sx={{ maxHeight: 150, overflowY: "auto", width: 300 }}>
         {history.map((entry, idx) => (
-          <ListItem key={idx}>{entry}</ListItem>
+          <ListItem key={idx} disablePadding>
+            <ListItemText primary={entry} />
+          </ListItem>
         ))}
       </List>
 
-      {/* 숨겨진 요소들 */}
+      {/* 숨김 요소들 */}
       <canvas
         ref={canvasRef}
         width={300}
